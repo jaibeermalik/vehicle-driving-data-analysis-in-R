@@ -5,9 +5,9 @@ output: html_notebook
 
 Please download the json formatted vehicle driving data set.
 
-Trips:
+Trips: https://www.kaggle.com/jaibeermalik/vehicle-driving-dataset-trips-json-zip
 
-Alerts:
+Alerts: https://www.kaggle.com/jaibeermalik/vehicle-driving-alerts-json-zip
 
 Driving Score & Geo Data:
 

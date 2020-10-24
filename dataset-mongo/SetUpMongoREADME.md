@@ -1,5 +1,5 @@
 
-1. Donwload and setup mongo db
+1. Download and setup mongo db
 
 2. Create drivingdataset database.
 

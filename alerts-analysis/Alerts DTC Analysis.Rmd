@@ -1,0 +1,126 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Common Functions and Common Parameters.
+
+```{r}
+source(here::here('dataset-mongo', 'MongoDataSet.R'))
+startDate <- "2015-07-21T00:00:01.000Z"
+endDate <- "2019-07-31T23:59:59.000Z"
+limitCount <- 10000000
+topCount <- 10
+
+plotDTCTypeEvents <- function(dtcTypeEvents, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle, onlyTop = FALSE, topCount = 0, inValidCodes = FALSE)
+{
+  if(inValidCodes)
+  {
+    invalidCodes <- dtcTypeEvents$dtcCodeInt[is.na(dtcTypeEvents$dtcCode)]
+    invalidCodesCountData <- count(invalidCodes)
+    if(onlyTop)
+    {
+      #all invalid ordered code
+      totalInvalidCodes <-invalidCodesCountData[order(invalidCodesCountData$freq, decreasing = TRUE), ]
+        if(topCount < length(totalInvalidCodes)) topInvalidCodeValues <- totalInvalidCodes
+        else topInvalidCodeValues <- head(totalInvalidCodes, topCount);
+          percentileData <- topInvalidCodeValues$freq / sum(topInvalidCodeValues$freq) * 100;
+          graphPlot <- barplot(height = percentileData, 
+                               names.arg = topInvalidCodeValues$x,
+                               main = mainTitle, 
+                               ylab = ylabTitle, 
+                               xlab = xlabTitle,
+                               ylim = range(ylimx, ylimy),
+                               border = TRUE
+                              )
+          text(x = graphPlot, y = percentileData, label = topInvalidCodeValues$freq, pos = 3, cex = 0.8, col = "red")    
+    }
+    else
+    {
+      plot(x = invalidCodesCountData$x, 
+           y = invalidCodesCountData$freq / sum(invalidCodesCountData$freq) * 100,
+           type = "p", 
+           xlim = range(xlimx, xlimy), 
+           ylim = range(ylimx, ylimy), 
+           main = mainTitle, 
+           ylab = ylabTitle, 
+           xlab = xlabTitle
+      ) 
+    }
+  }
+  else
+  {
+    dtcTypeEventsGraphData <- count(dtcTypeEvents, "dtcCodeInt")
+    if(onlyTop)
+    {
+      topValues <- head(dtcTypeEventsGraphData[
+        order(dtcTypeEventsGraphData$freq, decreasing = TRUE), ]
+        ,topCount)
+      percentileData <- topValues$freq / sum(topValues$freq) * 100
+      graphPlot <- barplot(height = percentileData, 
+              names.arg = topValues$dtcCodeInt,
+              main = mainTitle, 
+              ylab = ylabTitle, 
+              xlab = xlabTitle,
+              ylim = range(ylimx, ylimy),
+              border = TRUE
+      )
+      text(x = graphPlot, y = percentileData, label = topValues$freq, pos = 3, cex = 0.8, col = "red")
+    }
+    else
+    {
+      plot(x = dtcTypeEventsGraphData$dtcCodeInt, 
+           y = dtcTypeEventsGraphData$freq / sum(dtcTypeEventsGraphData$freq) * 100,
+           type = "p", 
+           xlim = range(xlimx, xlimy), 
+           ylim = range(ylimx, ylimy), 
+           main = mainTitle, 
+           ylab = ylabTitle, 
+           xlab = xlabTitle
+      ) 
+    }
+    
+  }
+}
+```
+
+Plot Alert DTC Event Occurrence
+
+```{r}
+plotDTCTypeEvents(getDTCTypeEventsWithMongo(startDate, endDate, limitCount), 
+                    0, 2000, 
+                    0, 50, 
+                    "DTC Occurrence", "DTC Freq %", "DTC Int Code"
+  )
+```
+Plot Alert DTC Distribution
+
+```{r}
+plotDTCTypeEvents(getDTCTypeEventsWithMongo(startDate, endDate, limitCount), 
+                    0, 10000, 
+                    0, 80, 
+                    "Top 10 DTC Distribution", "DTC Freq %", "DTC Int Code",
+                    TRUE, topCount
+                    )
+```
+
+Plot Alert Top 10 Invalid DTC Distribution
+
+```{r}
+plotDTCTypeEvents(getDTCTypeEventsWithMongo(startDate, endDate, limitCount), 
+                    0, 65000, 
+                    0, 20, 
+                    "Top 10 Invalid DTC Distribution", "DTC Freq %", "DTC Int Code",
+                    TRUE, topCount, TRUE
+                    )
+```
+Plot Alert Invalid DTC Distribution
+
+```{r}
+plotDTCTypeEvents(getDTCTypeEventsWithMongo(startDate, endDate, limitCount), 
+                    0, 10000, 
+                    0, 20, 
+                    "Invalid DTC Distribution", "DTC Freq %", "DTC Int Code",
+                    FALSE, 0, TRUE
+  )
+```

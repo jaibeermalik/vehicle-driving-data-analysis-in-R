@@ -1,0 +1,79 @@
+---
+title: "Alerts Analysis Notebook"
+output: html_notebook
+---
+
+Common Function and Common Parameters.
+
+```{r}
+source(here::here('dataset-mongo', 'MongoDataSet.R'))
+startDate <- "2015-07-21T00:00:01.000Z"
+endDate <- "2019-07-31T23:59:59.000Z"
+limitCount <- 10000000
+topCount <- 10
+
+plotAlarmTypeEvents <- function(alarmTypeEvents, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle)
+{
+  alarmTypeEventsGraphData <- count(alarmTypeEvents, "currentValue")
+  plot(x = alarmTypeEventsGraphData$currentValue, 
+       y = alarmTypeEventsGraphData$freq / sum(alarmTypeEventsGraphData$freq) * 100,
+       type = "p", 
+       xlim = range(xlimx, xlimy), 
+       ylim = range(ylimx, ylimy), 
+       main = mainTitle, 
+       ylab = ylabTitle, 
+       xlab = xlabTitle
+  ) 
+  
+  grid()
+  qqnorm(alarmTypeEventsGraphData$currentValue)
+  qqline(alarmTypeEventsGraphData$currentValue)
+  
+}
+```
+Plot Alert Event "HARD_ACCELERATION"
+```{r}
+plotAlarmTypeEvents(getAlarmTypeEventsWithMongo("HARD_ACCELERATION", startDate, endDate, limitCount), 
+                      10, 50, 
+                      0, 40, 
+                      "Hard Accel event penetration", "High Accel EventFreq%", "Value in g"
+  )
+  
+  
+```
+
+Plot Alert Event "HARD_DECELERATION"
+
+```{r}
+plotAlarmTypeEvents(getAlarmTypeEventsWithMongo("HARD_DECELERATION", startDate, endDate, limitCount), 
+                      10, 50, 
+                      0, 40, 
+                      "Hard Deacceleration event penetration", "High DeAccel EventFreq%", "Value in g"
+  )
+  
+  
+```
+
+Plot Alert Event "HIGH_RPM"
+
+```{r}
+plotAlarmTypeEvents(getAlarmTypeEventsWithMongo("HIGH_RPM", startDate, endDate, limitCount), 
+                      3000, 7000, 
+                      0, 20, 
+                      "High RPM event penetration", "High RPM EventFreq%", "Value in rpm"
+  )
+  
+  
+```
+
+Plot Alert Event "OVER_SPEEDING"
+
+```{r}
+plotAlarmTypeEvents(getAlarmTypeEventsWithMongo("OVER_SPEEDING", startDate, endDate, limitCount), 
+                      100, 200, 
+                      0, 10, 
+                      "Over Speeding event penetration", "Over Speeding EventFreq%", "Value in km/h"
+  ) 
+  
+  
+```

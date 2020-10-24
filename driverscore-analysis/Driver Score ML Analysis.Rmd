@@ -1,0 +1,128 @@
+---
+title: "Driver Score ML Analysis Notebook"
+output: html_notebook
+---
+
+Analyze driver score impacting params from mysql
+
+```{r}
+source(here::here('dataset-mysql', 'MySQLDataSet.R'))
+
+
+plotModelAndMatrices <- function(lmCountmodel, scoreData)
+{
+  #par(resetPar())
+  library(car)
+  par(mar = c(5.1, 4.1, 4.1, 2.1))
+  scatterplot(safetyS ~ nSpeed | nCrash, data=scoreData,
+              ylab="Safety score", 
+              xlab="High Speed count",
+              main="Enhanced Scatter Plot - Safety Score for Crash in group by High speed",
+              xlim = range(0, 20),
+              ylim = range(0, 100)
+              ) 
+}
+
+plotScatterMatrices <- function(scoreData)
+{
+  # Basic Scatterplot Matrix
+  pairs(~nSpeed + nDeAcel + nCrash,data=scoreData,
+        main="Crash  - High speed - Deaccel Scatterplot Matrix")
+}
+
+plotScatterMatricesWithGclus <- function(scoreData)
+{
+  # Scatterplot Matrices from the glus Package
+  library(gclus)
+  dta <- scoreData[c("nSpeed", "nDeAcel", "nCrash", "nRpm")] # get data
+  dta.r <- abs(cor(dta)) # get correlations
+  dta.col <- dmat.color(dta.r) # get colors
+  #dta.o <- order.single(dta.r)
+  #cpairs(dta, dta.o, panel.colors=dta.col, gap=.5,
+  #       main="Variables Ordered and Colored by Correlation" ) 
+}
+
+plotHighDensityScatterMatrices <- function(scoreData)
+{
+  # High Density Scatterplot with Binning
+  library(hexbin)
+  #x <- rnorm(1000)
+  #y <- rnorm(1000)
+  bin<-hexbin(scoreData$safetyS, scoreData$nSpeed, xbins=50, xbnds = range(0,100), ybnds = range(0,500))
+  plot(bin, main="Hexagonal Binning") 
+  #plot(bin, main="Hexagonal Binning", col = rgb(0,100,0,50,maxColorValue=255), pch=16) 
+  #dev.off()
+}
+
+plot3DScatter <- function(scoreData)
+{
+  library(scatterplot3d)
+  #scatterplot3d(scoreData$safetyS, scoreData$nSpeed, scoreData$nCrash, main="3D Scatterplot")
+  #scatterplot3d(scoreData$safetyS, scoreData$nSpeed, scoreData$nCrash, pch=16, highlight.3d=TRUE, type="h", main="3D Scatterplot") 
+  scatterplot3d(scoreData$nSpeed, scoreData$nCrash, scoreData$safetyS, pch=16, highlight.3d=TRUE, type="h", main="3D Scatterplot")
+  
+  #s3d <-scatterplot3d(scoreData$nSpeed, scoreData$nCrash, scoreData$safetyS, pch=16, highlight.3d=TRUE,
+  #                    type="h", main="3D Scatterplot")
+  #fit <- lm( scoreData$safetyS  ~ scoreData$nSpeed + scoreData$nCrash)
+  #s3d$plane3d(fit)
+  
+  #Not working
+  #library(rgl)
+  #plot3d(scoreData$nSpeed, scoreData$nCrash, scoreData$safetyS, col="red", size=3) 
+  
+  #Not working
+  #library(Rcmdr)
+  #scatter3d(scoreData$nSpeed, scoreData$nCrash, scoreData$safetyS) 
+  
+}
+
+plotRelativeImportance <- function(lmCountmodel)
+{
+  # Calculate Relative Importance for Each Predictor
+  library(relaimpo)
+  #calc.relimp(lmCountmodel,type=c("lmg","last","first","pratt"),
+  #            rela=TRUE)
+  
+  # Bootstrap Measures of Relative Importance (1000 samples)
+  #boot <- boot.relimp(lmCountmodel, b = 1000, type = c("lmg","last", "first", "pratt"), rank = TRUE, diff = TRUE, rela = TRUE)
+  #booteval.relimp(boot) # print result
+  #plot(booteval.relimp(boot,sort=TRUE)) # plot result  
+}
+
+drawTotalSVsRuntime <- function(plots)
+{
+  conn <- createConnection()
+  scoreData <- readScoreData(conn)
+  print(scoreData)
+  closeConnection(conn)
+  
+  plot(x = scoreData$nSpeed, 
+       y = scoreData$safetyS,
+       type = "p", 
+       xlim = range(0, 4), 
+       ylim = range(0, 100), 
+       main = "TotalS vs Runtime", 
+       ylab = "TotalS", 
+       xlab = "Runtime" 
+  ) 
+  grid() 
+  abline(lm(scoreData$tripS ~ scoreData$runtime)) 
+  #lmStdmodel <- lm(tripS ~ time + idle + fuel + speed + accel + deaccel + rpm + crash, data = scoreData)
+  #print(summary(lmStdmodel))
+  
+  lmCountmodel <- lm(safetyS ~ runtime + idletime + nSpeed + nAcel + nDeAcel + nRpm + nCrash,
+                   data = scoreData)
+  print(summary(lmCountmodel))
+  
+  
+  plotModelAndMatrices(lmCountmodel, scoreData)
+  plotScatterMatrices(scoreData)
+  plotScatterMatricesWithGclus(scoreData)
+  plotHighDensityScatterMatrices(scoreData)
+  plot3DScatter(data.frame(scoreData[scoreData$nSpeed < 20, ], stringsAsFactors = FALSE))
+  plotRelativeImportance(lmCountmodel)
+}
+
+drawTotalSVsRuntime();
+```
+

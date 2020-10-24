@@ -1,0 +1,82 @@
+---
+title: "Trips Seasonal Analysis - MongoDBDataSet Notebook"
+output: html_notebook
+---
+
+Common Functions and Params.
+
+```{r}
+source(here::here('dataset-mongo', 'MongoDataSet.R'))
+startDate <- "2015-07-21T00:00:01.000Z"
+endDate <- "2019-07-31T23:59:59.000Z"
+limitCount <- 10000000
+topCount <- 10
+```
+
+```{r}
+getTripsDailyData <- function()
+{
+  trips <- getVehicleTripsWithMongo(705, startDate, endDate, limitCount)
+  dates <- format(strptime(trips$startedOn, "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta"), 
+                  format="%Y-%m-%d")
+  years <- as.numeric(year(strptime(trips$startedOn, "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta")))
+  #years
+  months <- as.numeric(month(strptime(trips$startedOn, "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta")))
+  #months
+  days <- as.numeric(mday(strptime(trips$startedOn, "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta")))
+  #days
+  
+  trips$startdate <- dates
+  trips$year <- years
+  trips$month <- months
+  trips$day <- days
+  dt <- data.table(trips)
+  dt[, date := ISOdate(year, month, day)]
+  daily <- dt[, list(N  = .N, Distance  = mean(trips$totalMileage)), by = date]
+  setorder(daily, date)
+  return(daily)
+}
+
+daily <- getTripsDailyData()
+
+```
+
+Plot Trips Decompose
+
+```{r}
+plot(ts(daily))
+
+plot(ts(daily$N, start = 2016, frequency = 365), main = 'Number of trps 2016')
+
+plot(decompose(ts(daily$N, frequency = 7)))
+setNames(decompose(ts(daily$N, frequency = 7))$figure,weekdays(daily$date[1:7]))
+
+```
+
+Plot Trips Holt Winters
+
+```{r}
+  nts <- ts(daily$N, frequency = 7)
+  fit <- HoltWinters(nts, beta = FALSE, gamma = FALSE)
+  plot(fit)
+  
+  fit <- HoltWinters(nts)
+  plot(fit)
+```
+
+Plot Trips Forecast
+
+```{r}
+   library(forecast)
+  forecast(fit)
+  plot(forecast(HoltWinters(nts), 31))
+```
+Plot Trips using Zoo
+
+```{r}
+  library(zoo)
+  zd <- zoo(daily[, -1, with = FALSE], daily[[1]])
+  plot(zd)
+  plot(cumsum(zd))
+```
+

@@ -1,0 +1,18 @@
+---
+title: "Vehicle Driving Data Kaggle Notebook"
+output: html_notebook
+---
+
+Please download the json formatted vehicle driving data set.
+
+Trips:
+
+Alerts:
+
+Driving Score & Geo Data:
+
+```{r}
+
+```
+
+Steps to use the json data and different format.

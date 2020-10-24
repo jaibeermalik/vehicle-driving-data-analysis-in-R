@@ -1,0 +1,112 @@
+---
+title: "GeoData and Weather Data Generation Notebook"
+output: html_notebook
+---
+
+Generate Geo DataSet
+
+```{r}
+source(here::here('dataset-mysql', 'MySQLDBConnection.R'))
+
+insertReverseGeoCodingData <- function(conn)
+{
+  data <- readScoreDataFiltered(conn,  "select id, eLongitude,eLatitude from trips")
+  for(i in 1:length(data$eLongitude))
+  {
+    query <- paste("select count(*) from geodata where ilat=",data[i,]$eLatitude, " and ilong=",data[i,]$eLongitude,
+                   ";", sep = "")
+    exists <- readScoreDataFiltered(conn, query)
+    
+    if(exists == 0)
+    {
+      url <- paste("http://services.gisgraphy.com/reversegeocoding/search?format=json&lat=",
+                   data[i,]$eLatitude,"&lng=",data[i,]$eLongitude, sep = "")
+      print(url)
+      responseJson <- fromJSON(url)
+      Sys.sleep(7)
+      require(stringr)
+      if(length(responseJson$result$lat) <= 0) next
+      name <- " "
+      name <- str_replace(responseJson$result$name, "'", "")
+      houseNumber <- " "
+      houseNumber <- responseJson$result$houseNumber
+      streetName <- str_replace(responseJson$result$streetName, "\\\\", "")
+      streetName2 <- str_replace(streetName, "'", "")
+      streetName3 <- str_replace(streetName2, "'", "")
+      fulladd <- str_replace(responseJson$result$formatedFull, "'", "")
+      fulladd2 <- str_replace(fulladd, "'", "")
+      city <- str_replace(responseJson$result$city, "'", "")
+      updateQuery <-  paste("INSERT INTO geodata (tripid, ilat, ilong, olat, olong, name, houseNumber, streetName, city, citySubdivision, state, countryCode, geocodingLevel, distance, formatedFull) VALUES('",
+                            data[i,]$id, "', ", data[i,]$eLatitude,", ", data[i,]$eLongitude, ", ", 
+                            responseJson$result$lat, ", ", responseJson$result$lng,
+                            ", '", name,"', '", houseNumber,            
+                            "', '", streetName3 ,"', '", city, "', '", responseJson$result$citySubdivision,
+                            "', '", responseJson$result$state,"', '", responseJson$result$countryCode,"', '", responseJson$result$geocodingLevel,
+                            "', ", responseJson$result$distance,", '", fulladd2,
+                            "');",sep = '')
+      print(updateQuery)
+      dbSendQuery(conn, updateQuery)
+    }
+  }
+  
+}
+
+setupReverseGeocodingData <- function()
+{
+  conn <- createConnection()
+  insertReverseGeoCodingData(conn)
+  closeConnection(conn)
+}
+
+setupReverseGeocodingData();
+
+```
+
+Generate Weather DataSet
+
+```{r}
+
+updateWeatherData <- function(conn)
+{
+  data <- readScoreDataFiltered(conn, "select id, ilat, ilong, wlon from geodata")
+  #print(data)
+  for(i in 1:length(data$ilat))
+  {
+    if(is.na(data[i,]$wlon))
+    {
+      url <- paste("http://api.openweathermap.org/data/2.5/weather?lat=",
+                   data[i,]$ilat,"&lon=",data[i,]$ilong, "&appid=444a7793b259105977189bc21dc923b2",sep = "")
+      print(url)
+      responseJson <- fromJSON(url)
+      Sys.sleep(7)
+      print(responseJson$weather$main)
+      
+      updateQuery <-  paste("Update geodata set wlat=",responseJson$coord$lat,
+                            ", wlon=",responseJson$coord$lon,
+                            ", weather='",responseJson$weather$main,
+                            "', wTemp=",responseJson$main$temp,
+                            ", wPressure=",responseJson$main$pressure,
+                            ", wHumidity=",responseJson$main$humidity,
+                            ", wTempMin=",responseJson$main$temp_min,
+                            ", wTempMax=",responseJson$main$temp_max,
+                            #", wVisibility=",responseJson$visibility,
+                            ", wWindSpeed=",responseJson$wind$speed,
+                            ", wdt=",responseJson$dt,
+                            " where id=", data[i,]$id,
+                            sep = "")
+      print(updateQuery)
+      dbSendQuery(conn, updateQuery)
+    }
+  }
+}
+setupWeatherData <- function()
+{
+  conn <- createConnection()
+  updateWeatherData(conn)
+  closeConnection(conn)
+}
+
+setupWeatherData()
+
+```
+

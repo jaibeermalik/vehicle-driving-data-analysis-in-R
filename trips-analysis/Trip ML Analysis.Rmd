@@ -1,0 +1,234 @@
+---
+title: "Trip ML Analysis Notebook"
+output: html_notebook
+---
+
+Trip ML Analysis based on driving score data in mysql
+
+plotHourOfDayTripCountData()
+plotDayOfWeekTripCountData()
+plotPeriodOfDayTripCountData()
+plotTop20CityTripCountData()
+plotWeatherTripCountData()
+plotHourOfDayTripDurationData()
+
+Common Function and Dataset
+```{r}
+source(here::here('dataset-mysql', 'MySQLDataSet.R'))
+
+```
+
+
+plotHourOfDayTripCountData
+
+```{r}
+plotHourOfDayTripCountData <- function()
+{
+  scoreData <- readScoreDataFiltered("select sHourofday, count(*) as tripcount from trips group by sHourofday order by sHourofday")
+  #print(scoreData)
+  
+  library(ggplot2)
+  library(ggmap)
+  p <- 
+    ggplot(data = data.frame(scoreData), aes(sHourofday,tripcount )) +
+    geom_line(size = 1) +
+    #title_with_subtitle(paste("Hourly Trip Count"), "Based on trip data") +
+    expand_limits(y = 0) +
+    #theme_tws(base_size = 12) +
+    theme(legend.position = "bottom")
+  return (p)
+}
+plotHourOfDayTripCountData();
+```
+
+plotDayOfWeekTripCountData
+
+```{r}
+plotDayOfWeekTripCountData <- function()
+{
+  scoreData <- readScoreDataFiltered("select sDayofweek, count(*) as tripcount from trips group by sDayofweek order by sDayofweek")
+  #print(scoreData)
+  
+  library(ggplot2)
+  library(ggmap)
+  p <- 
+    ggplot(data = data.frame(scoreData), aes(sDayofweek,tripcount )) +
+    geom_line(size = 1) +
+    #title_with_subtitle(paste("Daily Trip Count"), "Based on trip data") +
+    expand_limits(y = 0) +
+    #theme_tws(base_size = 12) +
+    theme(legend.position = "bottom")
+  #print(p)
+  return (p)
+}
+plotDayOfWeekTripCountData()
+```
+
+plotPeriodOfDayTripCountData
+
+```{r}
+plotPeriodOfDayTripCountData <- function()
+{
+  scoreData <- readScoreDataFiltered("select dayperiod, count(*) as tripcount from trips group by dayperiod")
+  #print(scoreData)
+  
+  library(ggplot2)
+  library(ggmap)
+  p <- 
+    ggplot(data = data.frame(scoreData), aes(dayperiod,tripcount, group = 1 )) +
+    geom_point() +
+    geom_line(size = 1) +
+    #title_with_subtitle(paste("Period of day Trip Count"), "Based on trip data") +
+    expand_limits(y = 0) +
+    #theme_tws(base_size = 12) +
+    theme(legend.position = "bottom")
+  #print(p)
+  return (p)
+}
+
+plotPeriodOfDayTripCountData()
+```
+
+plotStartLocTripCountData
+
+```{r}
+plotStartLocTripCountData <- function()
+{
+  scoreData <- readScoreDataFiltered("select dayperiod, count(*) as tripcount from trips group by dayperiod")
+  #print(scoreData)
+  
+  library(ggplot2)
+  library(ggmap)
+  p <- 
+    ggplot(data = data.frame(scoreData), aes(dayperiod,tripcount, group = 1 )) +
+    geom_point() +
+    geom_line(size = 1) +
+    #title_with_subtitle(paste("Period of day Trip Count"), "Based on trip data") +
+    expand_limits(y = 0) +
+    #theme_tws(base_size = 12) +
+    theme(legend.position = "bottom")
+  #print(p)
+  return (p)
+}
+plotStartLocTripCountData();
+```
+
+plotTop20CityTripCountData
+
+```{r}
+plotTop20CityTripCountData <- function()
+{
+  scoreData <- readScoreDataFiltered("select count(*) as tripcount, g.city as city from trips t, geodata g where t.sLongitude = g.ilong
+                                     and t.sLatitude = g.ilat
+                                     group by city
+                                     order by tripcount desc
+                                     limit 20;")
+  #print(scoreData)
+  
+  library(ggplot2)
+  library(ggmap)
+  p <- 
+    ggplot(data = data.frame(scoreData), aes(city,tripcount, group = 1 )) +
+    #geom_line(size = 1) +
+    geom_bar(stat = "identity") +
+    #title_with_subtitle(paste("Hourly Trip Count"), "Based on trip data") +
+    expand_limits(y = 0) +
+    #theme_tws(base_size = 12) +
+    theme(legend.position = "bottom") + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  #print(p)
+  return (p)
+}
+
+plotTop20CityTripCountData()
+```
+
+plotWeatherTripCountData
+
+```{r}
+plotWeatherTripCountData <- function(conn)
+{
+  scoreData <- readScoreDataFiltered(conn, "select count(*) as tripcount, g.weather as weather from trips t, geodata g where t.sLongitude = g.ilong
+                                     and t.sLatitude = g.ilat
+                                     and weather is not null
+                                     group by weather
+                                     order by tripcount desc;")
+  #print(scoreData)
+  
+  library(ggplot2)
+  library(ggmap)
+  p <- 
+    ggplot(data = data.frame(scoreData), aes(weather,tripcount, group = 1 )) +
+    #geom_line(size = 1) +
+    geom_bar(stat = "identity") +
+    #title_with_subtitle(paste("weather Trip Count"), "Based on trip data") +
+    expand_limits(y = 0) +
+    #theme_tws(base_size = 12) +
+    theme(legend.position = "bottom") + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  #print(p)
+  return (p)
+}
+
+plotWeatherTripCountData()
+```
+
+plotHourOfDayTripDurationData
+
+```{r}
+plotHourOfDayTripDurationData <- function(conn)
+{
+  query <- "select ROUND(AVG(runtime)) as duration, sHourofday, count(*) as tripcount from trips 
+            where overweekend = 'weekday' group by overweekend,sHourofday ORDER BY tripcount DESC
+            ;"  
+  scoreData <- readScoreDataFiltered(conn, query)
+
+  library(ggplot2)
+  library(ggmap)
+  p <- 
+    ggplot(data = data.frame(scoreData), aes(sHourofday, group = 1 )) + 
+    geom_line(aes(y = duration, alpha = "  Median ") ) + 
+    
+    scale_y_continuous("trip duration in minutes\n") +
+    #title_with_subtitle(paste("Hourly Trip Count"), "Based on trip data") +
+    expand_limits(y = 0) +
+    #theme_tws(base_size = 12) +
+    theme(legend.position = "bottom") 
+  #print(p)
+  return (p)
+}
+
+plotHourOfDayTripDurationData()
+
+```
+
+plotCityPickupData
+
+```{r}
+plotCityPickupData <- function(conn, cityList, citylat, citylon,zoomlevel)
+{
+  query <- paste("select ilong, ilat from geodata where city in (", cityList,
+              ");")  
+  scoreData <- readScoreDataFiltered(conn, query)
+  #print(scoreData)
+  
+  library(ggplot2)
+  library(ggmap)
+  
+  mh_map = get_googlemap(center = c(citylon, citylat), zoom = zoomlevel, style = "feature:poi|visibility:off")
+  p <- ggmap(mh_map, extent = "device") +
+    geom_point(data=scoreData,
+               aes(x = ilong, y=ilat),
+               alpha = 0.0475,
+               size = 4,
+               shape=23, fill="blue",
+               color = "#cc0000") +
+    title_with_subtitle(cityList, "Pick ups") +
+    theme_tws_map(base_size = 12)
+  #print(p)
+  return (p)
+}
+
+plotCityPickupData();
+```
+

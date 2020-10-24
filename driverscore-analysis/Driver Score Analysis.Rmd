@@ -1,0 +1,671 @@
+---
+title: "Driver Score Analysis Notebook"
+output: html_notebook
+---
+
+DataSet set up for calculating Driver score.
+
+huge data, please use start/end dates accordingly to process on local machine.
+
+```{r}
+source(here::here('dataset-mongo', 'MongoDataSet.R'))
+source(here::here('dataset-mysql', 'MySQLDataSet.R'))
+require(jsonlite)
+startDate <- "2015-07-01T00:00:01.000Z"
+endDate <- "2015-07-31T23:59:59.000Z"
+limitCount <- 10
+limitEvents <- 10
+topCount <- 10
+```
+
+Get Trips Data from mongo db and generate driver score
+Find Driver score impacting parameters and store in mysql.
+
+```{r}
+
+getStandScoreForVehicleEventsGiven <-function(events, minValue, maxValue)
+{
+  if(nrow(events) > 0)
+  {
+    #print(paste(sum(events[c('currentValue')]), " ",nrow(events)))
+    std <- (sum(events[c('currentValue')]) - nrow(events)*minValue)/(maxValue - minValue)
+    #print(std)
+    return (std);  
+  }
+  #In case of no values, dont penalize and return 1
+  return (0);
+}
+
+getStandScoreNormalized <- function(scoreValue)
+{
+  if(is.na(scoreValue)) return (0)
+  if(scoreValue <= 0) return (0)
+  if(scoreValue >= 1) return (1)
+  if(scoreValue > 0 & scoreValue < 1) return (scoreValue)
+  return (0)
+}
+
+getStandScoreForVehicleFuelEconomy <-function(vehicleId, startDateMillis, endDateMillis, limitEvents)
+{
+  #queryEvents <- data.frame();
+  #TODO: Tmp data, should be actual data here.
+  queryEvents[c('rpmBand1')][1,] = floor(runif(1) * ((100 + 1) - 1)) + 1
+  #queryEvents[c('rpmBand2')][1,] = Math.floor(Math.random() * ((100 + 1) - 1)) + 1
+  #queryEvents[c('rpmBand3')][1,] = Math.floor(Math.random() * ((100 + 1) - 1)) + 1
+  #queryEvents[c('rpmBand4')][1,] = Math.floor(Math.random() * ((100 + 1) - 1)) + 1
+  #queryEvents[c('rpmBand5')][1,] = Math.floor(Math.random() * ((100 + 1) - 1)) + 1
+  #queryEvents[c('rpmBand6')][1,] = Math.floor(Math.random() * ((100 + 1) - 1)) + 1
+  #queryEvents[c('rpmBand7')][1,] = Math.floor(Math.random() * ((100 + 1) - 1)) + 1
+  #queryEvents[c('rpmBand8')][1,] = Math.floor(Math.random() * ((100 + 1) - 1)) + 1
+  #queryEvents[c('rpmBand9')][1,] = Math.floor(Math.random() * ((100 + 1) - 1)) + 1
+  #print(queryEvents)
+  
+  if(nrow(queryEvents) > 0)
+  {
+    #print(queryEvents[1,])
+    weights <- c(0.6, 0.85, 1, 1,1, 1, 0.9, 0.7, 0)
+    economy <- as.numeric(queryEvents[c('rpmBand1')][1,]) * 0.4 * weights[1] +
+      as.numeric(queryEvents[c('rpmBand2')][1,]) * 0.4 * weights[2] +
+      as.numeric(queryEvents[c('rpmBand3')][1,]) * 0.4 * weights[3] +
+      as.numeric(queryEvents[c('rpmBand4')][1,]) * 0.4 * weights[4] +
+      as.numeric(queryEvents[c('rpmBand5')][1,]) * 0.4 * weights[5] +
+      as.numeric(queryEvents[c('rpmBand6')][1,]) * 0.4 * weights[6] +  
+      as.numeric(queryEvents[c('rpmBand7')][1,]) * 0.4 * weights[7] +
+      as.numeric(queryEvents[c('rpmBand8')][1,]) * 0.4 * weights[8] +
+      as.numeric(queryEvents[c('rpmBand9')][1,]) * 0.4 * weights[9]
+   # print(economy)
+   return (economy/100)   
+  }
+  #dont penalize user, return 100
+  return(0)
+}
+
+getTripScoresWithStdFactors <- function()
+{
+  trips <- getTripsWithEndLocation(startDate, endDate, limitCount);
+  print(trips)
+  #trips <- getVehicleTrips(10010, startDate, endDate, limitCount);
+  tripsScoreWithFactors <- c()
+  n = 48
+  for (i in seq(1, by=length(trips$X_id), length=n))
+    tripsScoreWithFactors[seq(i, length=length(trips$X_id))] = 0;
+  dim(tripsScoreWithFactors) = c(length(trips$X_id),n)
+  #tripsScoreWithFactors
+  
+  for (v in 1:length(trips$X_id)) {
+    #print(trips[c('X_id')][v,])
+    
+    tripsScoreWithFactors[v,1] = trips[c('X_id')][v,]
+    tripsScoreWithFactors[v,2] = TRUE
+    #ignore short trips
+    if(trips[c('totalMileage')][v,] < 1*1000 | trips[c('totalRunTime')][v,] < 10*60) 
+    {
+      tripsScoreWithFactors[v,2] = FALSE
+      #print(paste("Ignoring trip, Distance: ", trips[c('totalMileage')][v,], " ,Time: ", trips[c('totalRunTime')][v,]))
+      next;
+    }
+    
+    #print(trips[c('startedOn')][v,])
+    #print(trips[c('endedOn')][v,])
+    
+    #dispaly numberic without e
+    options(scipen = 999)
+    
+    #TODO: check date format in data retrieval.
+    #tripStartDate <- as.numeric(as.POSIXct(strptime(trips[c('startedOn')][v,],  
+    #                                                "%a %b %d %H:%M:%S GMT+05:30 %Y", tz = "Asia/Kolkata"), tz = "Asia/Kolkata")) * 1000
+    #tripEndDate <- as.numeric(as.POSIXct(strptime(trips[c('endedOn')][v,],  
+    #                                              "%a %b %d %H:%M:%S GMT+05:30 %Y", tz = "Asia/Kolkata"), tz = "Asia/Kolkata")) * 1000
+    
+    tripStartDate <- as.numeric(as.POSIXct(strptime(trips[c('startedOn')][v,],  
+                                                    "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta"), tz = "Asia/Calcutta")) * 1000
+    tripEndDate <- as.numeric(as.POSIXct(strptime(trips[c('endedOn')][v,],  
+                                                  "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta"), tz = "Asia/Calcutta")) * 1000
+    vehicleId <- as.numeric(trips[c('carId')][v,])
+    
+    tripsScoreWithFactors[v,23] = vehicleId
+    tripsScoreWithFactors[v,24] = tripStartDate
+    tripsScoreWithFactors[v,25] = tripEndDate
+    
+    startLocation <- fromJSON(trips[c('startLoc')][v,])
+    endLocation <- fromJSON(trips[c('endLoc')][v,])
+    
+    tripsScoreWithFactors[v,26] = as.numeric(endLocation$lng)
+    tripsScoreWithFactors[v,27] = as.numeric(endLocation$lat)
+    
+    sDate <- as.POSIXlt(tripStartDate/1000, origin="1970-01-01")
+    eDate <- as.POSIXlt(tripEndDate/1000, origin="1970-01-01")
+    
+    tripsScoreWithFactors[v,28] = as.numeric(sDate$hour)
+    tripsScoreWithFactors[v,29] = as.numeric(sDate$mday)
+    tripsScoreWithFactors[v,30] = as.numeric(sDate$mon + 1)
+    tripsScoreWithFactors[v,31] = as.numeric(sDate$wday + 1)
+    tripsScoreWithFactors[v,32] = as.numeric(sDate$year + 1900)
+    tripsScoreWithFactors[v,33] = as.numeric(sDate$yday)
+    
+    tripsScoreWithFactors[v,34] = as.numeric(eDate$hour)
+    tripsScoreWithFactors[v,35] = as.numeric(eDate$mday)
+    tripsScoreWithFactors[v,36] = as.numeric(eDate$mon + 1)
+    tripsScoreWithFactors[v,37] = as.numeric(eDate$wday + 1)
+    tripsScoreWithFactors[v,38] = as.numeric(eDate$year + 1900)
+    tripsScoreWithFactors[v,39] = as.numeric(eDate$yday)
+    
+    if(all(sDate$mon + 1 %in% c(12, 1, 2))) tripsScoreWithFactors[v,40] = "winter"
+    if(all(sDate$mon + 1 %in% c(3, 4, 5))) tripsScoreWithFactors[v,40] = "spring"
+    if(all(sDate$mon + 1 %in% c(6, 7, 8))) tripsScoreWithFactors[v,40] = "summer"
+    if(all(sDate$mon + 1 %in% c(9, 10, 11))) tripsScoreWithFactors[v,40] = "fall"
+    
+    tripsScoreWithFactors[v,41] = as.numeric(startLocation$lng)
+    tripsScoreWithFactors[v,42] = as.numeric(startLocation$lat)
+    tripsScoreWithFactors[v,43] = round(as.numeric(startLocation$lng),4)
+    tripsScoreWithFactors[v,44] = round(as.numeric(startLocation$lat),4)
+    tripsScoreWithFactors[v,45] = round(as.numeric(endLocation$lng),4)
+    tripsScoreWithFactors[v,46] = round(as.numeric(endLocation$lat),4)
+    
+    
+    if(all(sDate$hour %in% c(5,6,7,8,9,10))) tripsScoreWithFactors[v,47] = "morning"
+    if(all(sDate$hour %in% c(11,12,13,14,15))) tripsScoreWithFactors[v,47] = "afternoon"
+    if(all(sDate$hour %in% c(16,17,18,19,20,21))) tripsScoreWithFactors[v,47] = "evening"
+    if(all(sDate$hour %in% c(22,23,0,1,2,3,4))) tripsScoreWithFactors[v,47] = "latenight"
+    
+    if(all(sDate$wday %in% c(0,6))) tripsScoreWithFactors[v,48] = "weekend"
+    if(all(sDate$wday %in% c(1,2,3,4,5))) tripsScoreWithFactors[v,48] = "weekday"
+    
+    # OVER_SPEEDING
+    #print(trips[c('vehicleId')][v,])
+    #print(tripStartDate)
+    #print(tripEndDate)
+    #print(limitEvents)
+    #Sys.timezone()
+    
+    
+    
+    
+    stdFuelEconomy <- NaN #getStandScoreForVehicleFuelEconomy(vehicleId, tripStartDate, tripEndDate, limitEvents)
+    events <- getAlarmTypeEventsTimestamped(vehicleId, "OVER_SPEEDING", tripStartDate, tripEndDate, limitEvents)
+    tripsScoreWithFactors[v,18] = as.numeric(nrow(events))
+    stdSpeeding <- getStandScoreForVehicleEventsGiven(events, 100, 130)
+    
+    events <- getAlarmTypeEventsTimestamped(vehicleId, "HARD_ACCELERATION", tripStartDate, tripEndDate, limitEvents)
+    tripsScoreWithFactors[v,19] = as.numeric(nrow(events))
+    stdHardAccel <- getStandScoreForVehicleEventsGiven(events, 11, 53)
+    
+    events <- getAlarmTypeEventsTimestamped(vehicleId, "HARD_DECELERATION", tripStartDate, tripEndDate, limitEvents)
+    tripsScoreWithFactors[v,20] = as.numeric(nrow(events))
+    stdHardDeaccel <- getStandScoreForVehicleEventsGiven(events, 12, 18)
+    
+    events <- getAlarmTypeEventsTimestamped(vehicleId, "HIGH_RPM", tripStartDate, tripEndDate, limitEvents)
+    tripsScoreWithFactors[v,21] = as.numeric(nrow(events))
+    stdRpm <- getStandScoreForVehicleEventsGiven(events, 3500, 5000)
+    
+    events <- getAlarmTypeEventsTimestamped(vehicleId, "CRASH", tripStartDate, tripEndDate, limitEvents)
+    tripsScoreWithFactors[v,22] = as.numeric(nrow(events))
+    stdCrash <- nrow(events)
+    
+    stdIdleTime <- trips[c('totalIdleTime')][v,]/trips[c('totalRunTime')][v,]
+    stdTimeEfficiency <- (1 - ((as.numeric(trips[c('totalMileage')][v,])/(25 * 1000/3600)) / 
+                                 as.numeric(trips[c('totalRunTime')][v,]))) 
+    
+    tripsScoreWithFactors[v,3] = stdFuelEconomy
+    tripsScoreWithFactors[v,4] = stdSpeeding
+    tripsScoreWithFactors[v,5] = stdHardAccel
+    tripsScoreWithFactors[v,6] = stdHardDeaccel
+    tripsScoreWithFactors[v,7] = stdRpm
+    tripsScoreWithFactors[v,8] = stdCrash
+    tripsScoreWithFactors[v,9] = stdIdleTime
+    tripsScoreWithFactors[v,10] = stdTimeEfficiency
+    
+    #print(paste("Std: ", stdFuelEconomy, " ",
+    #            stdSpeeding, " ",
+    #            stdHardAccel, " ",
+    #            stdHardDeaccel, " ",
+    #            stdRpm, " ",
+    #            stdCrash, " ",
+    #            stdIdleTime, " ",
+    #            stdTimeEfficiency
+    #   ))
+    
+    finalStdFuelEconomy <- getStandScoreNormalized(stdFuelEconomy);
+    finalStdSpeeding <- getStandScoreNormalized(stdSpeeding)
+    finalStdHardAccel <- getStandScoreNormalized(stdHardAccel)
+    finalStdHardDeaccel <- getStandScoreNormalized(stdHardDeaccel)
+    finalStdRpm <- getStandScoreNormalized(stdRpm)
+    finalStdCrash <- getStandScoreNormalized(stdCrash)
+    finalStdIdleTime <- getStandScoreNormalized(stdIdleTime)
+    finalStdTimeEfficiency <- getStandScoreNormalized(stdTimeEfficiency)
+    
+    #print(paste("Final std=> fuel: ", finalStdFuelEconomy, 
+    #            " speed: ", finalStdSpeeding, 
+    #            " Accel: ", finalStdHardAccel, 
+    #            " Deaccel: ", finalStdHardDeaccel, 
+    #            " Rpm: ", finalStdRpm, 
+    #            " Crash: ", finalStdCrash, 
+    #            " idleTime: ", finalStdIdleTime, 
+    #            " TimeEfficy: ", finalStdTimeEfficiency
+    #            ))
+    
+    #final weights
+    safetyWeights <- c(3.6, 36.7, 1.8, 30.9, 26.9, 0, 0, 0)
+    fuelEfficiencyWeights <- c(66, 0, 33, 0, 0.7, 0.3, 0, 0)
+    tripEfficiencyWeights <- c(0, 0, 0, 0, 0, 0, 50, 50)
+    totalWeights <- c(48, 32, 20)
+    #Excel sheet weights
+    #safetyWeights <- c(3, 34, 2, 29, 25, 6, 0, 0)
+    #fuelEfficiencyWeights <- c(66, 0, 33, 0, 0.7, 0.3, 0, 0)
+    #tripEfficiencyWeights <- c(0, 0, 0, 0, 0, 0, 50, 50)
+    #totalWeights <- c(48, 32, 20)
+    safetyBaseScore <- (1 - (finalStdFuelEconomy * safetyWeights[1]/100 + 
+                               finalStdSpeeding * safetyWeights[2]/100 +
+                               finalStdHardAccel * safetyWeights[3]/100 +
+                               finalStdHardDeaccel * safetyWeights[4]/100 +
+                               finalStdRpm * safetyWeights[5]/100 +
+                               finalStdCrash * safetyWeights[6]/100 +
+                               finalStdIdleTime * safetyWeights[7]/100 +
+                               finalStdTimeEfficiency * safetyWeights[8]/100)) * 100
+    
+    #print(safetyBaseScore)
+    
+    fuelEfficiencyBaseScore <- (1 - (finalStdFuelEconomy * fuelEfficiencyWeights[1]/100 + 
+                                       finalStdSpeeding * fuelEfficiencyWeights[2]/100 +
+                                       finalStdHardAccel * fuelEfficiencyWeights[3]/100 +
+                                       finalStdHardDeaccel * fuelEfficiencyWeights[4]/100 +
+                                       finalStdRpm * fuelEfficiencyWeights[5]/100 +
+                                       finalStdCrash * fuelEfficiencyWeights[6]/100 +
+                                       finalStdIdleTime * fuelEfficiencyWeights[7]/100 +
+                                       finalStdTimeEfficiency * fuelEfficiencyWeights[8]/100)) * 100
+    
+    #print(fuelEfficiencyBaseScore)
+    
+    tripEfficiencyBaseScore <- (1 - (finalStdFuelEconomy * tripEfficiencyWeights[1]/100 + 
+                                       finalStdSpeeding * tripEfficiencyWeights[2]/100 +
+                                       finalStdHardAccel * tripEfficiencyWeights[3]/100 +
+                                       finalStdHardDeaccel * tripEfficiencyWeights[4]/100 +
+                                       finalStdRpm * tripEfficiencyWeights[5]/100 +
+                                       finalStdCrash * tripEfficiencyWeights[6]/100 +
+                                       finalStdIdleTime * tripEfficiencyWeights[7]/100 +
+                                       finalStdTimeEfficiency * tripEfficiencyWeights[8]/100)) * 100
+    
+    #print(tripEfficiencyBaseScore)
+    
+    totalBaseScore <- (safetyBaseScore * totalWeights[1] + 
+                         fuelEfficiencyBaseScore * totalWeights[2] + 
+                         tripEfficiencyBaseScore * totalWeights[3])/100 
+    
+    
+    #print(tripEfficiencyBaseScore)
+    #print(paste("Trip: ",trips[c('X_id')][v,],  " ,Safety: ", round(safetyBaseScore,2), 
+    #            " ,Fuel: ", round(fuelEfficiencyBaseScore,2), 
+    #            " ,Trip: ", round(tripEfficiencyBaseScore,2),
+    #            " ,Total: ", round(totalBaseScore,2)
+    #            ))
+    
+    tripsScoreWithFactors[v,11] = as.numeric(round(safetyBaseScore,2))
+    tripsScoreWithFactors[v,12] = as.numeric(round(fuelEfficiencyBaseScore,2))
+    tripsScoreWithFactors[v,13] = as.numeric(round(tripEfficiencyBaseScore,2))
+    tripsScoreWithFactors[v,14] = as.numeric(round(totalBaseScore,2))
+    tripsScoreWithFactors[v,15] = as.numeric(trips[c('totalRunTime')][v,]/60)
+    tripsScoreWithFactors[v,16] = as.numeric(trips[c('totalMileage')][v,]/1000)
+    tripsScoreWithFactors[v,17] = as.numeric(trips[c('totalIdleTime')][v,]/60)
+  }
+  
+  #22 columns
+  colnames(tripsScoreWithFactors) <- c("id","ignored", "fuel","speed","accel","deaccel","rpm","crash","idle","time",
+                                                  "safetyS","fuelS","tripS","totalS","runtime","mileage","idletime",
+                                                  "nSpeed", "nAcel", "nDeAcel", "nRpm", "nCrash",
+                                                  "carid","startdate", "enddate","eLongitude","eLatitude",
+                                                  "sHourofday", "sDayofmonth","sMonthofyear", "sDayofweek", "sYear", "sDayofyear",
+                                                  "eHourofday", "eDayofmonth","eMonthofyear", "eDayofweek", "eYear", "eDayofyear",
+                                                  "season","sLongitude","sLatitude","gSLongitude","gSLatitude","gELongitude","gELatitude",
+                                                  "dayperiod","overweekend"
+                                       )
+  #print(tripsScore)
+  #print(typeof(tripsScore[v,7]))
+  return (tripsScoreWithFactors)
+}
+
+getTripScoresWithStdFactorsModelData <- function()
+{
+  scores <- getTripScoresWithStdFactors()
+  #print(scores)
+  modelData <- data.frame(scores[scores[, 2] == TRUE, ], 
+                          stringsAsFactors = FALSE)
+  #print(modelData)
+  modelData[, c(3:39,41:46)] <- sapply(modelData[, c(3:39,41:46)], as.numeric)
+  #print(head(modelData[, c(3:10)]),10)
+  return (modelData)
+}
+
+insertScoreData <- function(conn)
+{
+  modelDataF <- getTripScoresWithStdFactorsModelData()
+  dbWriteTable(conn, "trips", modelDataF)
+}
+
+setupAllDataFromClean <- function()
+{
+  conn <- createConnection()
+  setupDBFromClean(conn)
+  insertScoreData(conn)
+  #readScoreData(conn)
+  closeConnection(conn)
+}
+
+setupAllDataFromClean();
+```
+
+Calculate Driver scrore
+Predict Score based on Trip Time
+
+```{r}
+
+getStandScoreForVehicleEvents <-function(vehicleId, eventAlarmType, minValue, maxValue, startDateMillis, endDateMillis, limitEvents)
+{
+  events <- getAlarmTypeEventsTimestamped(vehicleId, eventAlarmType, startDateMillis, endDateMillis, limitEvents)
+  #print(events)
+  if(nrow(events) > 0)
+  {
+    #print(paste(sum(events[c('currentValue')]), " ",nrow(events)))
+    std <- (sum(events[c('currentValue')]) - nrow(events)*minValue)/(maxValue - minValue)
+    #print(std)
+    return (std);  
+  }
+  #In case of no values, dont penalize and return 1
+  return (0);
+}
+  
+getTripScores <- function()
+{
+  trips <- getTripsWithMongo(startDate, endDate, limitCount);
+  print(trips)
+  tripsScore <- c()
+  n = 10
+  for (i in seq(1, by=length(trips$X_id), length=n))
+    tripsScore[seq(i, length=length(trips$X_id))] = 0;
+  dim(tripsScore) = c(length(trips$X_id),n)
+
+  for (v in 1:length(trips$X_id)) {
+    tripsScore[v,1] = trips[c('X_id')][v,]
+    tripsScore[v,2] = TRUE
+    #ignore short trips
+    if(trips[c('totalMileage')][v,] < 1*1000 | trips[c('totalRunTime')][v,] < 10*60) 
+    {
+      tripsScore[v,2] = FALSE
+      next;
+    }
+    if( is.nan(trips[c('startedOn')][v,]) | trips[c('startedOn')][v,] == "") 
+    {
+      tripsScore[v,2] = FALSE
+      next;
+    }
+    if( is.nan(trips[c('endedOn')][v,]) | trips[c('endedOn')][v,] == "") 
+    {
+      tripsScore[v,2] = FALSE
+      next;
+    }
+    
+    #dispaly numberic without e
+    options(scipen = 999)
+    tripStartDate <- as.numeric(as.POSIXct(strptime(trips[c('startedOn')][v,],  
+                                                    "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta"), tz = "Asia/Calcutta")) * 1000
+    tripEndDate <- as.numeric(as.POSIXct(strptime(trips[c('endedOn')][v,],  
+                                                  "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta"), tz = "Asia/Calcutta")) * 1000
+    
+    stdFuelEconomy <- NaN  #getStandScoreForVehicleFuelEconomy(as.numeric(trips[c('vehicleId')][v,]), tripStartDate, tripEndDate)
+    stdSpeeding <- getStandScoreForVehicleEvents(as.numeric(trips[c('carId')][v,]), "OVER_SPEEDING", 100, 130, tripStartDate, tripEndDate, limitEvents)
+    stdHardAccel <- getStandScoreForVehicleEvents(as.numeric(trips[c('carId')][v,]), "HARD_ACCELERATION", 11, 53, tripStartDate, tripEndDate, limitEvents)
+    stdHardDeaccel <- getStandScoreForVehicleEvents(as.numeric(trips[c('carId')][v,]), "HARD_DECELERATION", 12, 18, tripStartDate, tripEndDate, limitEvents)
+    stdRpm <- getStandScoreForVehicleEvents(as.numeric(trips[c('carId')][v,]), "HIGH_RPM", 3500, 5000, tripStartDate, tripEndDate, limitEvents)
+    stdCrash <- nrow(getAlarmTypeEventsTimestamped(as.numeric(trips[c('carId')][v,]), "CRASH", tripStartDate, tripEndDate, limitEvents))
+    stdIdleTime <- trips[c('totalIdleTime')][v,]/trips[c('totalRunTime')][v,]
+    stdTimeEfficiency <- (1 - ((as.numeric(trips[c('totalMileage')][v,])/(25 * 1000/3600)) / 
+                                 as.numeric(trips[c('totalRunTime')][v,]))) 
+    
+    finalStdFuelEconomy <- getStandScoreNormalized(stdFuelEconomy);
+    finalStdSpeeding <- getStandScoreNormalized(stdSpeeding)
+    finalStdHardAccel <- getStandScoreNormalized(stdHardAccel)
+    finalStdHardDeaccel <- getStandScoreNormalized(stdHardDeaccel)
+    finalStdRpm <- getStandScoreNormalized(stdRpm)
+    finalStdCrash <- getStandScoreNormalized(stdCrash)
+    finalStdIdleTime <- getStandScoreNormalized(stdIdleTime)
+    finalStdTimeEfficiency <- getStandScoreNormalized(stdTimeEfficiency)
+    
+    #final weights
+    safetyWeights <- c(3.6, 36.7, 1.8, 30.9, 26.9, 0, 0, 0)
+    fuelEfficiencyWeights <- c(66, 0, 33, 0, 0.7, 0.3, 0, 0)
+    tripEfficiencyWeights <- c(0, 0, 0, 0, 0, 0, 50, 50)
+    totalWeights <- c(48, 32, 20)
+    safetyBaseScore <- (1 - (finalStdFuelEconomy * safetyWeights[1]/100 + 
+                               finalStdSpeeding * safetyWeights[2]/100 +
+                               finalStdHardAccel * safetyWeights[3]/100 +
+                               finalStdHardDeaccel * safetyWeights[4]/100 +
+                               finalStdRpm * safetyWeights[5]/100 +
+                               finalStdCrash * safetyWeights[6]/100 +
+                               finalStdIdleTime * safetyWeights[7]/100 +
+                               finalStdTimeEfficiency * safetyWeights[8]/100)) * 100
+    
+    fuelEfficiencyBaseScore <- (1 - (finalStdFuelEconomy * fuelEfficiencyWeights[1]/100 + 
+                                       finalStdSpeeding * fuelEfficiencyWeights[2]/100 +
+                                       finalStdHardAccel * fuelEfficiencyWeights[3]/100 +
+                                       finalStdHardDeaccel * fuelEfficiencyWeights[4]/100 +
+                                       finalStdRpm * fuelEfficiencyWeights[5]/100 +
+                                       finalStdCrash * fuelEfficiencyWeights[6]/100 +
+                                       finalStdIdleTime * fuelEfficiencyWeights[7]/100 +
+                                       finalStdTimeEfficiency * fuelEfficiencyWeights[8]/100)) * 100
+    
+    tripEfficiencyBaseScore <- (1 - (finalStdFuelEconomy * tripEfficiencyWeights[1]/100 + 
+                                       finalStdSpeeding * tripEfficiencyWeights[2]/100 +
+                                       finalStdHardAccel * tripEfficiencyWeights[3]/100 +
+                                       finalStdHardDeaccel * tripEfficiencyWeights[4]/100 +
+                                       finalStdRpm * tripEfficiencyWeights[5]/100 +
+                                       finalStdCrash * tripEfficiencyWeights[6]/100 +
+                                       finalStdIdleTime * tripEfficiencyWeights[7]/100 +
+                                       finalStdTimeEfficiency * tripEfficiencyWeights[8]/100)) * 100
+    
+    totalBaseScore <- (safetyBaseScore * totalWeights[1] + 
+                         fuelEfficiencyBaseScore * totalWeights[2] + 
+                         tripEfficiencyBaseScore * totalWeights[3])/100 
+    
+    tripsScore[v,3] = as.numeric(round(safetyBaseScore,2))
+    tripsScore[v,4] = as.numeric(round(fuelEfficiencyBaseScore,2))
+    tripsScore[v,5] = as.numeric(round(tripEfficiencyBaseScore,2))
+    tripsScore[v,6] = as.numeric(round(totalBaseScore,2))
+    tripsScore[v,7] = as.numeric(trips[c('totalRunTime')][v,]/60)
+    tripsScore[v,8] = as.numeric(trips[c('totalMileage')][v,]/1000)
+    tripsScore[v,9] = as.numeric(trips[c('totalIdleTime')][v,]/60)
+  }
+  
+  colnames(tripsScore) <- c("id","ignored", "safety","fuel","trip","total","time","mileage","idle","b2")
+  return (tripsScore)
+}
+
+predictScoreBasedOnTripTime <- function()
+{
+  library(gamlss.data)
+  scores <- getTripScores()
+  modelData <- data.frame(scores[scores[, 7] > 0 & scores[, 8] > 0, ], 
+                          stringsAsFactors = FALSE)
+  modelData[, c(3:10)] <- sapply(modelData[, c(3:10)], as.numeric)
+  model.0 <- lm(mileage ~ trip, data = modelData)
+  print(summary(model.0))
+  coef(model.0)
+  confint(model.0)
+  resid(model.0)
+  deviance(model.0)
+  anova(model.0)
+  
+  #library(MASS)
+  #bc <- boxcox(model.0)
+  #lambda <- bc$x[which.max(bc$y)] 
+  #print(lambda)
+  
+  library(car)
+  outlier.test(model.0)
+  influence.measures(model.0)
+  
+  #library(lmtest)
+  #dwtest(model.0)
+  #acf(model.0)
+  
+  
+  
+  plot(mileage ~ trip, data = modelData, cex.lab = 1.5)
+  abline(coef = coef(model.0), col = "red", lwd = 2.5)
+  legend('bottomright', legend = 'mileage ~ trip', lty = 1, col = 'red',lwd = 2.5, title = 'Regression line')
+  
+  modelData$prediction <- predict(model.0)
+  modelData$residual <- resid(model.0)
+  plot(mileage ~ trip, data = modelData, cex.lab = 1.5)
+  abline(coef = coef(model.0), col = 'red', lwd = 2.5)
+  print(paste(modelData$trip, modelData$mileage, modelData$prediction))
+  segments(x0 = as.numeric(modelData$trip), y0 = as.numeric(modelData$mileage), 
+           x1 = as.numeric(modelData$trip), y1 = as.numeric(modelData$prediction), col = 'blue', lty = 2)
+  legend('bottomright', legend = c('mileage ~ trip', 'residuals'),
+         lty = c(1, 2), col = c('red', 'blue'), lwd = 2.5,
+         title = 'Regression line')
+  
+  
+  model.1 <- update(model.0, . ~ . + time)
+  print(summary(model.1))
+  library(scatterplot3d)
+  plot3d <- scatterplot3d(modelData$trip, modelData$mileage, modelData$prediction, pch = 19,
+                          type = 'h', highlight.3d = TRUE, main = '3-D Scatterplot')
+ # plot3d$plane3d(model.0, lty = 'solid', col = 'red')
+  
+  
+  r <- prcomp( ~ as.numeric(modelData$mileage) 
+               + as.numeric(modelData$time )
+               + as.numeric(modelData$idle))
+  print(summary(r))
+  
+  r <- prcomp( ~ as.numeric(modelData$time) + as.numeric(modelData$idle) )
+  slope <- r$rotation[2,1] / r$rotation[1,1]
+  intercept <- r$center[2] - slope*r$center[1]
+  
+  #d <- dist(as.numeric(modelData$time))
+  #hc <- hclust(d)
+  #clust <- cutree(hc)
+  #plot(as.numeric(modelData$time) ~ factor(clust), main="Identified Clusters", xlab="Cluster Number")
+  
+  
+  
+}
+predictScoreBasedOnTripTime()
+```
+
+Predict for Trip
+
+```{r}
+
+getStdFactorsTripScores <- function()
+{
+  trips <- getTripsWithMongo(startDate, endDate, limitCount);
+  tripsScoreFactors <- c()
+  n = 10
+  for (i in seq(1, by=length(trips$X_id), length=n))
+    tripsScoreFactors[seq(i, length=length(trips$X_id))] = 0;
+  dim(tripsScoreFactors) = c(length(trips$X_id),n)
+
+  for (v in 1:length(trips$X_id)) {
+    tripsScoreFactors[v,1] = trips[c('X_id')][v,]
+    tripsScoreFactors[v,2] = TRUE
+    #ignore short trips
+    if(trips[c('totalMileage')][v,] < 1*1000 | trips[c('totalRunTime')][v,] < 10*60) 
+    {
+      tripsScoreFactors[v,2] = FALSE
+      next;
+    }
+    
+    #dispaly numberic without e
+    tripStartDate <- as.numeric(as.POSIXct(strptime(trips[c('startedOn')][v,],  
+                                                    "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta"), tz = "Asia/Calcutta")) * 1000
+    tripEndDate <- as.numeric(as.POSIXct(strptime(trips[c('endedOn')][v,],  
+                                                  "%a %b %d %H:%M:%S IST %Y", tz = "Asia/Calcutta"), tz = "Asia/Calcutta")) * 1000
+    
+    stdFuelEconomy <- NaN #getStandScoreForVehicleFuelEconomy(as.numeric(trips[c('carId')][v,]), tripStartDate, tripEndDate)
+    stdSpeeding <- getStandScoreForVehicleEvents(as.numeric(trips[c('carId')][v,]), "OVER_SPEEDING", 100, 130, tripStartDate, tripEndDate, limitEvents)
+    stdHardAccel <- getStandScoreForVehicleEvents(as.numeric(trips[c('carId')][v,]), "HARD_ACCELERATION", 11, 53, tripStartDate, tripEndDate, limitEvents)
+    stdHardDeaccel <- getStandScoreForVehicleEvents(as.numeric(trips[c('carId')][v,]), "HARD_DECELERATION", 12, 18, tripStartDate, tripEndDate, limitEvents)
+    stdRpm <- getStandScoreForVehicleEvents(as.numeric(trips[c('carId')][v,]), "HIGH_RPM", 3500, 5000, tripStartDate, tripEndDate, limitEvents)
+    stdCrash <- nrow(getAlarmTypeEventsTimestamped(as.numeric(trips[c('carId')][v,]), "CRASH", tripStartDate, tripEndDate, limitEvents))
+    stdIdleTime <- trips[c('totalIdleTime')][v,]/trips[c('totalRunTime')][v,]
+    stdTimeEfficiency <- (1 - ((as.numeric(trips[c('totalMileage')][v,])/(25 * 1000/3600)) / 
+                                 as.numeric(trips[c('totalRunTime')][v,]))) 
+    
+    tripsScoreFactors[v,3] = stdFuelEconomy
+    tripsScoreFactors[v,4] = stdSpeeding
+    tripsScoreFactors[v,5] = stdHardAccel
+    tripsScoreFactors[v,6] = stdHardDeaccel
+    tripsScoreFactors[v,7] = stdRpm
+    tripsScoreFactors[v,8] = stdCrash
+    tripsScoreFactors[v,9] = stdIdleTime
+    tripsScoreFactors[v,10] = stdTimeEfficiency
+    
+    finalStdFuelEconomy <- getStandScoreNormalized(stdFuelEconomy);
+    finalStdSpeeding <- getStandScoreNormalized(stdSpeeding)
+    finalStdHardAccel <- getStandScoreNormalized(stdHardAccel)
+    finalStdHardDeaccel <- getStandScoreNormalized(stdHardDeaccel)
+    finalStdRpm <- getStandScoreNormalized(stdRpm)
+    finalStdCrash <- getStandScoreNormalized(stdCrash)
+    finalStdIdleTime <- getStandScoreNormalized(stdIdleTime)
+    finalStdTimeEfficiency <- getStandScoreNormalized(stdTimeEfficiency)
+  }
+  colnames(tripsScoreFactors) <- c("id","ignored", "fuel","speed","accel","deaccel","rpm","crash","idle","time")
+  return (tripsScoreFactors)
+}
+
+getStdFactorsTripScoresModelData <- function()
+{
+  factors <- getStdFactorsTripScores()
+  #print(factors)
+  modelData <- data.frame(factors[factors[, 2] == TRUE, ], 
+                          stringsAsFactors = FALSE)
+  #print(modelData)
+  modelData[, c(3:10)] <- sapply(modelData[, c(3:10)], as.numeric)
+  #print(head(modelData[, c(3:10)]),10)
+  return (modelData)
+}
+
+predictFAOnTrip <- function()
+{
+  modelData <- getStdFactorsTripScoresModelData()
+  print(modelData)
+  # - Factorial analysis
+  #plot(prcomp(modelData[, c(3:10)]))
+  #fit <- factanal(modelData[, c(4:10)], factors=3, na.action=na.omit)
+  #print(fit, digits=2, cutoff=.3, sort=TRUE)
+  # - plot factor 1 by factor 2
+  #load <- fit$loadings[,1:2]
+  #plot(load,type="n") # set up plot
+  #text(load,labels=names(modelData[, c(4:10)]),cex=.7) # add variable names
+  
+  # Principal Axis Factor Analysis
+  library(psych)
+  library(GPArotation)
+  # - deprecated: fit <- factor.pa(modelData[, c(4:10)], nfactors=3)
+  #fit <- fa(modelData[, c(4:10)], nfactors=3, rotate="varimax", fm = "pa")
+  #print(fit) # print results
+  
+  # -- Determining the Number of Factors to Extract
+  library(nFactors)
+  #ev <- eigen(cor(modelData[, c(4:10)])) # get eigenvalues
+  #ap <- parallel(subject=nrow(modelData[, c(4:10)]),var=ncol(modelData[, c(4:10)]), rep=100,cent=.05)
+  #nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
+  #plotnScree(nS)
+  
+  # PCA Variable Factor Map
+  library(FactoMineR)
+  result <- PCA(modelData[, c(4:10)]) # graphs generated automatically 
+  
+  #-- Structual Equation Modeling 
+  # Simple CFA Model
+  library(sem)
+  #mydata.cov <- cov(modelData[, c(4:10)])
+  #model.mydata <- specify.model()
+  #mydata.sem <- sem(model.mydata, mydata.cov, nrow(mydata))
+  #print(summary(mydata.sem))
+  #print(std.coef(mydata.sem))
+}
+
+predictFAOnTrip();
+```
+

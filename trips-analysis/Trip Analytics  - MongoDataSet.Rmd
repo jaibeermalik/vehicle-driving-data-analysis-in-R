@@ -1,0 +1,139 @@
+---
+title: "Trips Analytics - MongoDBDataSet Notebook"
+output: html_notebook
+---
+
+Common Functions and Params. NOT WORKING! (Dataset waiting!)
+
+```{r}
+source(here::here('dataset-mongo', 'MongoDataSet.R'))
+startDate <- "2015-01-21T00:00:01.000Z"
+endDate <- "2019-07-31T23:59:59.000Z"
+limitCount <- 10000000
+topCount <- 10
+
+
+ trips <- getVehicleMonthlyTripsWithMongo(705, startDate, endDate, limitCount)
+```
+
+Trips Day Analytics
+
+```{r}
+
+sortedData <- arrange(trips, day)
+  graphPlot <- barplot(height = sortedData$distance/1000, 
+                       names.arg = sortedData$day,
+                       xpd=FALSE,
+                       main = "Daily trip analysis For month (distance travelled)",
+                       xlab= "Day of month",
+                       ylab= "Distance Travelled (Km)",
+                       ylim = range(0, 100),
+                       border = TRUE
+  )
+  text(x = graphPlot, y = sortedData$distance/1000, label = sortedData$distance/1000, pos = 3, cex = 0.8, col = "red")
+  
+```
+
+TRIPS day analytics runtime
+
+```{r}
+graphPlot <- barplot(height = round(sortedData$runTime/60,0), 
+                       names.arg = sortedData$day,
+                       #col=gray(1 - rel.hts),
+                       xpd=FALSE,
+                       main = "Daily trip analysis For month (Runtime)",
+                       xlab= "Day of month",
+                       ylab= "Runtime (mins)",
+                       ylim = range(0, 200),
+                       #legend.text = graphData$countsRange,
+                       border = TRUE
+  )
+  text(x = graphPlot, y = round(sortedData$runTime/60,0), label = round(sortedData$runTime/60,0), pos = 3, cex = 0.8, col = "red")
+  
+```
+
+TRIPS day analytics idletime
+
+```{r}
+graphPlot <- barplot(height = round(sortedData$idleTime/60,0), 
+                       names.arg = sortedData$day,
+                       #col=gray(1 - rel.hts),
+                       xpd=FALSE,
+                       main = "Daily trip analysis For month (idleTime)",
+                       xlab= "Day of month",
+                       ylab= "Runtime (mins)",
+                       ylim = range(0, 100),
+                       #legend.text = graphData$countsRange,
+                       border = TRUE
+  )
+  text(x = graphPlot, y = round(sortedData$idleTime/60,0), label = round(sortedData$idleTime/60,0), pos = 3, cex = 0.8, col = "red")
+  
+```
+
+TRIPS day analytics runtime vs idletime
+
+```{r}
+timeinfo <- as.matrix(sortedData[,5:6]/60, byrow = FALSE, nrow=1)
+  timeinfo <- c(rbind(sortedData[,5]/60, sortedData[,6]/60)) 
+  print(timeinfo)
+  
+  timeinfoX <- as.matrix(sortedData[,7])
+  timeinfoX <- matrix( rep( timeinfoX , 2 ) , ncol = ncol(timeinfoX) , byrow = TRUE )
+  timeinfoX <- sort(timeinfoX)
+  print(timeinfoX)
+  
+  graphPlot <- barplot(timeinfo, 
+                       width = 0.6,
+                       names.arg = timeinfoX,
+                       main = "Daily trip analysis For month (Runtime vs idleTime)",
+                       xlab= "Day of month",
+                       ylab= "Time (mins)",
+                       ylim = range(0, 200),
+                       xlim = range(1,32),
+                       border = TRUE,
+                       legend = c("RunTime","IdleTime"),
+                       col=c("darkblue","red"),
+                       beside=TRUE,
+                       horiz = FALSE
+                       ,
+                       cex.lab = 1.5, 
+                       cex.main = 1.4
+                    )
+  
+  text(x = graphPlot, y = round(timeinfo,0), label = round(timeinfo,0), pos = 3, cex = 0.8, col = "red")
+  
+```
+
+Filled Density Plot
+
+```{r}
+ d <- density(sortedData[,5]/60, bw = 1)
+  e <- density(sortedData[,6]/60, bw = 1)
+  plot(d, main="Kernel Density of Miles Per Gallon")
+  
+  polygon(d, col="red", border="blue") 
+  polygon(e, col="blue", border="blue") 
+```
+
+```{r}
+ library(ggplot2)
+  prop = table(timeinfo,margin=2)
+  
+  plot <- ggplot(prop, aes(x= day, y= idleTime, fill = day)) + 
+    geom_bar(stat="identity", position = "dodge") + 
+    scale_fill_brewer(palette = "Set1")
+  print(plot)
+  text(x = graphPlot, y = round(sortedData$idleTime/60,0), label = round(sortedData$idleTime/60,0), pos = 3, cex = 0.8, col = "red")
+  
+```
+
+```{r}
+library(plotly)
+  plot_ly(sortedData, x = ~day, y = ~runTime, type = 'bar', name = 'Primary Product', marker = list(color = 'rgb(49,130,189)')) %>%
+    add_trace(y = ~idleTime, name = 'Secondary Product', marker = list(color = 'rgb(204,204,204)')) %>%
+    layout(xaxis = list(title = "", tickangle = -45),
+           yaxis = list(title = ""),
+           margin = list(b = 100),
+           barmode = 'group')
+```
+

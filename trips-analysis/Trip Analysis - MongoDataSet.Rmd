@@ -1,0 +1,112 @@
+---
+title: "Trip Analysis - MongoDataSet Notebook"
+output: html_notebook
+---
+
+Common Function and Params
+
+```{r}
+source(here::here('dataset-mongo', 'MongoDataSet.R'))
+startDate <- "2015-07-21T00:00:01.000Z"
+endDate <- "2019-07-31T23:59:59.000Z"
+limitCount <- 10000000
+topCount <- 10
+
+plotRange <- function(seqRange, countsRange, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle)
+{
+  graphData <- data.frame(seqRange, countsRange)
+  percentileData <- graphData$countsRange / sum(graphData$countsRange) * 100
+  rel.hts <- (graphData$countsRange - min(graphData$countsRange)) / (max(graphData$countsRange) - min(graphData$countsRange))
+  grays <- gray(1 - rel.hts)
+  graphPlot <- barplot(height = percentileData, 
+                       names.arg = graphData$seqRange,
+                       col=grays,
+                       xpd=FALSE,
+                       main = mainTitle,
+                       xlab= xlabTitle,
+                       ylab= ylabTitle,
+                       ylim = range(ylimx, ylimy),
+                       #legend.text = graphData$countsRange,
+                       border = TRUE
+  )
+  text(x = graphPlot, y = percentileData, label = graphData$countsRange, pos = 3, cex = 0.8, col = "red")
+  
+}
+
+
+```
+
+Plot Trips Distance Distribution
+
+```{r}
+plotDistanceRangeTrip <- function(trips, seqRange, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle)
+{
+  countsRange <- numeric(length(seqRange));
+  for(i in 1:length(countsRange)) {
+    if(i == 1) countsRange[i] <- length(which(
+      trips$totalMileage/1000 <= seqRange[i]));
+    if(i > 1) countsRange[i] <- length(which(
+      trips$totalMileage/1000 > seqRange[i-1] & 
+        trips$totalMileage/1000 <= seqRange[i]));
+  }
+  plotRange(seqRange, countsRange, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle)
+  
+}
+
+plotDistanceRangeTrip(getTripsWithMongo(startDate, endDate, limitCount), 
+                        c(0.5, 1, 3,5, 10, 20,30,40,50, 100,150, 200, 1000),
+                        0, 20, 
+                        0, 60, 
+                        "Trips Distance Distribution", "% Trips", "Distance in Km"
+                        )
+```
+
+Plot Trips Runtime Distribution
+
+```{r}
+
+plotRuntimeRangeTrip <- function(trips, seqRange, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle)
+{
+  countsRange <- numeric(length(seqRange));
+  for(i in 1:length(countsRange)) {
+    if(i == 1) countsRange[i] <- length(which(
+      trips$totalRunTime/60 <= seqRange[i]));
+    if(i > 1) countsRange[i] <- length(which(
+      trips$totalRunTime/60 > seqRange[i-1] & 
+        trips$totalRunTime/60 <= seqRange[i]));
+  }
+  plotRange(seqRange, countsRange, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle)
+}
+
+plotRuntimeRangeTrip(getTripsWithMongo(startDate, endDate, limitCount), 
+                       c(10,20,30,40,50,60,120,180,240,360,1000),
+                       0, 20, 
+                       0, 60, 
+                       "Trips Runtime Distribution", "% Trips", "Runtime in minutes"
+                      )
+```
+Plot Trips Average Speed
+
+```{r}
+
+plotAverageSpeedRangeTrip <- function(trips, seqRange, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle)
+{
+  countsRange <- numeric(length(seqRange));
+  for(i in 1:length(countsRange)) {
+    if(i == 1) countsRange[i] <- length(which(
+      trips$totalMileage*3.6/trips$totalRunTime <= seqRange[i]));
+    if(i > 1) countsRange[i] <- length(which(
+      trips$totalMileage*3.6/trips$totalRunTime > seqRange[i-1] & 
+        trips$totalMileage*3.6/trips$totalRunTime <= seqRange[i]));
+  }
+  plotRange(seqRange, countsRange, xlimx, xlimy, ylimx, ylimy, mainTitle, ylabTitle, xlabTitle)
+}
+
+plotAverageSpeedRangeTrip(getTripsWithMongo(startDate, endDate, limitCount), 
+                            c(10,20,30,40,50,60,150),
+                            0, 20, 
+                            0, 60, 
+                            "Trips Average Speed Distribution", "% Trips", "Speed in Km/h"
+                          )
+```
+

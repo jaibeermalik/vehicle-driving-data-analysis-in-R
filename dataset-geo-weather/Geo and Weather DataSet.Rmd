@@ -63,6 +63,7 @@ setupReverseGeocodingData();
 ```
 
 Generate Weather DataSet
+TODO: Update openweather api token below before running.
 
 ```{r}
 
@@ -75,7 +76,7 @@ updateWeatherData <- function(conn)
     if(is.na(data[i,]$wlon))
     {
       url <- paste("http://api.openweathermap.org/data/2.5/weather?lat=",
-                   data[i,]$ilat,"&lon=",data[i,]$ilong, "&appid=444a7793b259105977189bc21dc923b2",sep = "")
+                   data[i,]$ilat,"&lon=",data[i,]$ilong, "&appid=<enter-api-token-here>",sep = "")
       print(url)
       responseJson <- fromJSON(url)
       Sys.sleep(7)
